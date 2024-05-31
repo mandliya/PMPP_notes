@@ -2,5 +2,5 @@
 
 | Chapter | Title | Notes | Code |
 | --- | --- | --- | --- |
-| 1 | Introduction | [Notes](chapter_notes/1_Introduction.md) | - |
-| 2 | Heterogeneous Data Parallel Computing | [Notes](chapter_notes/2_Heterogenous_data_parallel_computing.md) | [vector_addition.cu](code/chapter_2/vector_addition.cu) |
+| 1 | Introduction | [Notes](1_Introduction/notes.md) | - |
+| 2 | Heterogeneous Data Parallel Computing | [Notes](2_Heterogenous_data_parallel_computing/notes_exercises.md) | [vector_addition.cu](2_Heterogenous_data_parallel_computing/code/vector_addition.cu) |

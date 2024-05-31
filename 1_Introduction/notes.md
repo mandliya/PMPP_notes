@@ -106,3 +106,4 @@ Apart from speed, there are many other reasons why developers and companies adop
 - GPUs have emerged as a powerful parallel architecture for general-purpose computing due to their high throughput and large number of cores.
 - CUDA has made it easier for developers to write programs that run on both the CPU and GPU, leading to the rise of hybrid computing.
 
+
