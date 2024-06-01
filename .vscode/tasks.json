@@ -1,0 +1,47 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "C/C++: nvcc build active file",
+			"command": "/usr/local/cuda/bin/nvcc",
+			"args": [
+				"-g",
+				"${file}",
+				"-o",
+				"${workspaceFolder}/target/${fileBasenameNoExtension}",
+				"-I/usr/include/opencv4",
+				"-L/usr/local/lib",
+				"-lopencv_core",
+				"-lopencv_imgcodecs",
+				"-lopencv_highgui",
+				"-lopencv_imgproc"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "compiler: /usr/local/cuda/bin/nvcc"
+		},
+		{
+			"label": "Run compiled file",
+			"type": "shell",
+			"command": "${workspaceFolder}/target/${fileBasenameNoExtension}",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"dependsOn": "C/C++: nvcc build active file",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			}
+		}
+	]
+}

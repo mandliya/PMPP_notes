@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.sql": "jinja-sql",
+        "ios": "cpp",
+        "chrono": "cpp",
+        "iostream": "cpp"
+    }
+}
