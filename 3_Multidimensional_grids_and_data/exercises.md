@@ -157,8 +157,8 @@ Say we want to find index at (1, 2, 2), we can calculate it like this:
 - Thus the index will be 9 + 6 + 2 = 17 (which stores value 18, 0 based indexing)
 
 Similarly, lets work out the index for (10, 20, 5) in a 400 x 500 x 300 tensor.
-- First index will be 10th 2D array, so 10 * 500 * 300 = 1,500,000
-- Second index will be 20th row of the 10th 2D array, so 20 * 300 = 6,000
-- Third index will be 5th element of the 20th row of the 10th 2D array, so 5
+- First index will be 11th 2D array, so 10 * 500 * 300 = 1,500,000
+- Second index will be 21st row of the 11th 2D array, so 20 * 300 = 6,000
+- Third index will be 6th element of the 21st row of the 10th 2D array, so 5
 - Thus the index will be 1,500,000 + 6,000 + 5 = 1,506,005
 
