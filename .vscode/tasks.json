@@ -30,7 +30,7 @@
 			"detail": "compiler: /usr/local/cuda/bin/nvcc"
 		},
 		{
-			"label": "Run compiled file",
+			"label": "Run & comple current CUDA file",
 			"type": "shell",
 			"command": "${workspaceFolder}/target/${fileBasenameNoExtension}",
 			"options": {
