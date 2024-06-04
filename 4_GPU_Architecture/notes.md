@@ -54,15 +54,113 @@ Now, lets focus on what happens on one SM when a block is assigned to it.
 ### Warps
 - Warps are the unit of scheduling and execution on the SM.
 - Size of the warps is device specific, although it has always been 32 threads till now.
-- Threds in a warp are scheduled together and executed following **SIMD (Single Instruction, Multiple Data)** model.
-- This means that all threads in a warp execute the same instruction at the same time however all these threads will be working on different data.
+- Threads in a warp are scheduled together and executed following **SIMD (Single Instruction, Multiple Data)** model.
+- This means that all threads in a warp execute the same instruction at the same time however all these threads will be working on different data. (We will discuss what happenes during branching)
 - The advantage of that is instruction fetch and decode is done only once for the warp. This reduces amount of control logic required and thus saves power and real estate.
+- The disadvantage is that if threads in a warp have different execution paths, some threads will be idle while others are executing. This is called **control divergence**.
+```cpp
+if(threadIdx.x % 2 == 0) {
+    A;
+    B;
+} else {
+    X;
+    Y; 
+}
+```
+- In the above code, if `threadIdx.x` is even, the first branch will be executed (A and B) by half of the threads while other half will be idle. Similarly, if `threadIdx.x` is odd, the second branch will be executed (X and Y) by half of the threads while other half will be idle.
 
-### Processing Blocks
-- SM can also be divided into multiple **processing blocks**. Each processing block has its own scheduler, register file, instruction cache, dispatch unit etc.
-- For example, an SM with 64 CUDA cores can be divided into 4 processing blocks each with 16 CUDA cores (variable across different architectures).
-- A warp is executed by a single processing block. In other words, all threads in a warp are executed by a single processing block.
-- This doesn't mean processing block executes only one warp at a time. It can execute multiple warps but each warp is executed by a single processing block.
+![control divergence](images/control_divergence.png)
+- This is not a problem in CPUs because CPUs can context switch between threads i.e. if one thread is waiting for some data, CPU can switch to another thread. However, in GPUs, threads in a warp are executed concurrently and thus if some threads are waiting, other threads will be idle. Context Switching is not feasible in GPUs due to massive parallelism.
+
+Another example of control divergence:
+```cpp
+int N = a[threadIdx.x];
+for (int i = 0; i < N; i++) {
+    A;
+}
+```
+![control divergence loop](images/control_divergence_loop.png)
+
+In the loop, some threads may have to execute the loop more times than others. This will cause some threads to be idle while others are executing the loop.
+
+Programmers need to be aware of control divergence and try to minimize it. We will discuss how to minimize control divergence in later chapters.
+
+## Architecture of Streaming Processor (SM)
+
+![A100 streaming multiprocessor](images/sm_architecture.png)
+
+- The diagram shows A100 SM architecture. It has 128 SMs and each SM has 4 processing blocks. Let's explore the components of the streaming multiprocessor:
+- SM can also be divided into multiple **processing blocks**.
+
+- **Processing Blocks**: Processing Blocks are the units that execute the instructions. Each processing block has its own set of execution units. In the diagram above for A100 GPU, we have:
+    - 16 FP32 CUDA cores per processing block.
+    - 16 INT32 CUDA cores per processing block.
+    - 8 FP64 CUDA cores per processing block.
+    - 2 Tensor cores per processing block.
+    - 8 Load/store units per processing block.
+    - 1 Special Function Units (SFU) per processing block.
+- Each processing block has its own scheduler, register file, instruction cache, dispatch unit etc.
+- **Shared memory/L1 Data cache**: Shared memory is a fast memory shared by all processing blocks in the SM. It is used for communication between threads in the same block. It is also used as a cache for global memory.
+- **L0 Instruction cache**: Stores instructions to be executed by the executing units within a processing block. Each processing block has its own L0 instruction cache.
+- **Warp Scheduler**: Schedules warps to the execution units. A warp is executed by a single processing block. In other words, all threads in a warp are executed by a single processing block.
+- **Dispatch unit**: Fetches instructions from the instruction cache and dispatches them to the execution units within the processing block.
+- **Register file**: Stores the registers for the threads within a processing block.
+- **Execution units**: Execute the instructions within the processing block. They can be of different types like:
+    - FP32 CUDA cores: Execute 32 bit floating point operations also known as single precision operations.
+    - INT32 CUDA cores: Execute 32 bit integer operations.
+    - FP64 CUDA cores: Execute 64 bit floating point operations also known as double precision operations.
+    - Tensor cores: Specialized units for matrix operations (essential for deep learning workloads).
+    - Load/store units: Handles memory operations within including loading data to and from the memory.
+    - Special Function Units (SFU): Execute special functions like trigonometric functions, exponential functions etc.
+- **Tex units**: Texture units are used for texture mapping in graphics workloads.
+
+## Latency Hiding
+- GPUs are designed for high throughput. They are designed to hide the latency of memory operations.
+- When a thread  in a warp is waiting for data from memory, the scheduler switches to another warp and executes it.
+- This way, the execution units are kept busy and the latency of memory operations is hidden.
+- This is called **latency hiding**.
+![latency hiding](images/latency_hiding.png)
+- For latency hiding to work, ideally there should be lot more warps to hide long latency operations. With lot more warps, there is a high probability that some warp will be ready to execute when the current warp is waiting for data from memory.
+- For this reason, Streaming Multiprocessors (SMs) support many more threads than the number of execution units. Volta V100 supports 2048 threads per SM while there are 64 cores per SM.  Remember that a single core can execute only one thread at a time. So, if a thread is waiting for data from memory, the core will be idle. However, the scheduler can switch to another warp and execute it on another core. This way, the execution units are kept busy and the latency of memory operations is hidden.
+
+### Occupancy
+- Occupancy is the measure of how well the GPU is utilized.
+- Occupancy of an SM refers to the ratio of active warps to the maximum number of warps that can be executed simultaneously on the SM.
+- Higher occupancy is desirable because it means that the SM is being utilized to its full potential and it improves the latency hiding.
+- Occupancy can be increased by increasing the number of threads per block, increasing the number of blocks per SM, reducing the amount of shared memory used by each block etc.
+- How we choose the block size and number of blocks per SM can affect the occupancy. Let's take an example of volta V100, it has the following specifications:
+    - Max threads per SM: 2048
+    - Max blocks per SM: 32
+    - Max threads per block: 1024
+
+- If we launch a kernel with 256 threads per block, we can have 8 blocks per SM (which is less than max 32 blocks). This will result in 8 * 256 = 2048 threads per SM. This will result in 100% occupancy.
+
+- If we launch a kernel with 32 threads per block, we can have 64 blocks per SM (which is more than max 32 blocks). So we will cap the number of blocks to 32. This will result in 32 * 32 = 1024 threads per SM. This will result in 50% occupancy.
+
+- If we launch a kernel with 768 threads per block, occupancy will be limited because 2048 is not divisible by 768. So, we will have 2 blocks per SM. The remaining of 512 threads will not be utilized.
+
+- So, we need to choose the block size and number of blocks per SM carefully to maximize the occupancy.
+
+How to know properties of a device programmaically:
+```cpp
+int device = 0;
+cudaDeviceProp prop;
+cudaGetDeviceProperties(&prop, device);
+int maxThreadsPerBlock = prop.maxThreadsPerBlock;
+int maxThreadsPerMultiProcessor = prop.maxThreadsPerMultiProcessor;
+``` 
+
+# Summary
+- A GPU consists of multiple Streaming Multiprocessors (SMs).
+- Each SM consists of multiple CUDA cores.
+- Threads are grouped in blocks and blocks are executed by SMs.
+- Threads in a block can synchronize and collaborate.
+- Threads in different blocks are independent of each other.
+- Transparent scalability allows the same code to run on different GPU architectures.
+- Threads in a warp are executed concurrently following SIMD model.
+- Control divergence can cause some threads to be idle while others are executing.
+- SMs are designed for high throughput and hide the latency of memory operations.
+- Occupancy is the measure of how well the GPU is utilized. Higher occupancy is desirable.
 
 
 
