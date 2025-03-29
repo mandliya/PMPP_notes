@@ -48,7 +48,6 @@ jobs:
       # 5. Inject default front matter only into new (untracked) files
       - name: Ensure front matter on new files only
         run: |
-          # Change directory to blog so that git ls-files works as expected.
           cd blog
           find _posts -type f -name "*.md" | while read FILE; do
             # Only process files that are not yet tracked (i.e. newly added)
@@ -115,7 +114,6 @@ EOF
         working-directory: blog
         run: |
           git add .
-          # If there are no changes, commit will be skipped gracefully
           git diff --quiet && echo "No changes to commit" || git commit -m "Auto-update blog from PMPP_Notes on $(date +'%Y-%m-%d %H:%M:%S')"
           git push
           echo "Blog updated!"
