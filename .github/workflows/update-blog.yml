@@ -28,7 +28,7 @@ jobs:
           repository: mandliya/mandliya.github.io
           path: blog
           token: ${{ secrets.BLOG_TOKEN }}
-          # If your blog uses a branch like gh-pages, uncomment the following line:
+          # If your blog uses a branch like gh-pages, uncomment:
           # ref: gh-pages
 
       # 4. Sync PMPP_Notes content into blog/_posts/Chapters/ (preserving folder structure)
@@ -55,17 +55,18 @@ jobs:
               if ! head -n 1 "$FILE" | grep -q '^---'; then
                 echo "Injecting default front matter into new file: $FILE"
                 TEMP_FILE="$(mktemp)"
-                cat <<EOF > "$TEMP_FILE"
----
-title: "$(basename "$FILE" .md)"
-date: "$(date +'%Y-%m-%d %H:%M:%S %z')"
-categories: [PMPP_Notes]
-tags: [CUDA, HPC]
-description: "Auto-generated front matter for $(basename "$FILE")"
-math: true
-mermaid: true
-pin: false
----
+                # Use <<-EOF with tab-indented content (make sure to use literal tab characters)
+                cat <<-EOF > "$TEMP_FILE"
+		---
+		title: "$(basename "$FILE" .md)"
+		date: "$(date +'%Y-%m-%d %H:%M:%S %z')"
+		categories: [PMPP_Notes]
+		tags: [CUDA, HPC]
+		description: "Auto-generated front matter for $(basename "$FILE")"
+		math: true
+		mermaid: true
+		pin: false
+		---
 EOF
                 cat "$FILE" >> "$TEMP_FILE"
                 mv "$TEMP_FILE" "$FILE"
@@ -85,23 +86,19 @@ EOF
             if [ -z "$DATE_LINE" ]; then
               DATE_LINE="$(date +'%Y-%m-%d')"
             fi
-
             # Extract the title from the front matter (e.g., title: "Primer on LLM Inference")
             TITLE_LINE="$(awk -F': ' '/^title:/ {print $2}' "$FILE" | head -n1)"
             TITLE_LINE="$(echo "$TITLE_LINE" | sed 's/^"//; s/"$//')"
             if [ -z "$TITLE_LINE" ]; then
               TITLE_LINE="$(basename "$FILE" .md)"
             fi
-
             # Create a slug from the title: lowercase, replace non-alphanumerics with hyphens
             SLUG="$(echo "$TITLE_LINE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g')"
             SLUG="$(echo "$SLUG" | sed 's/-$//; s/^-//')"
-
             # Build the new filename
             NEWNAME="${DATE_LINE}-${SLUG}.md"
             DIRNAME="$(dirname "$FILE")"
             NEWPATH="$DIRNAME/$NEWNAME"
-
             # Rename only if the filename is different
             if [ "$FILE" != "$NEWPATH" ]; then
               echo "Renaming $FILE -> $NEWPATH"
