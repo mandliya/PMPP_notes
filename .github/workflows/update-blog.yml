@@ -28,11 +28,12 @@ jobs:
           repository: mandliya/mandliya.github.io
           path: blog
           token: ${{ secrets.BLOG_TOKEN }}
-          # If your blog uses a branch like gh-pages, uncomment:
+          # If your blog uses a branch like gh-pages, uncomment the following:
           # ref: gh-pages
 
       # 4. Sync PMPP_Notes content into blog/_posts/Chapters/ (preserving folder structure)
-      - name: Sync PMPP_Notes to _posts
+      #    so only new chapters are added here.
+      - name: Sync PMPP_Notes to _posts/Chapters
         run: |
           sudo apt-get update
           sudo apt-get install -y rsync
@@ -45,13 +46,14 @@ jobs:
             --exclude 'update_blog.yml' \
             ./ blog/_posts/Chapters/
 
-      # 5. Inject default front matter only into new (untracked) files
+      # 5. Inject default front matter ONLY into new (untracked) .md files under _posts/Chapters
       - name: Ensure front matter on new files only
         run: |
           cd blog
-          find _posts -type f -name "*.md" | while read FILE; do
-            # Only process files that are not yet tracked (i.e. newly added)
+          find _posts/Chapters -type f -name "*.md" | while read FILE; do
+            # Skip if this file is already tracked (existing/published)
             if ! git ls-files --error-unmatch "$FILE" > /dev/null 2>&1; then
+              # If file does not start with '---', inject default front matter
               if ! head -n 1 "$FILE" | grep -q '^---'; then
                 echo "Injecting default front matter into new file: $FILE"
                 TEMP_FILE=$(mktemp)
@@ -69,45 +71,61 @@ jobs:
                 mv "$TEMP_FILE" "$FILE"
               fi
             else
-              echo "Skipping file $FILE as it is already tracked"
+              echo "Skipping existing file: $FILE"
             fi
           done
 
-      # 6. Rename files to match the required Jekyll naming structure: YYYY-MM-DD-some_slug.md
-      - name: Rename files to match Jekyll pattern
+      # 6. Rename only NEW (untracked) files in _posts/Chapters to YYYY-MM-DD-some-slug.md
+      - name: Rename new files to match Jekyll pattern
         run: |
           cd blog
-          find _posts -type f -name "*.md" | while read FILE; do
-            # Extract the date from the front matter (e.g., date: 2024-10-31 13:43:48 -0700)
-            DATE_LINE=$(awk '/^date:/ {print $2}' "$FILE" | head -n1)
-            if [ -z "$DATE_LINE" ]; then
-              DATE_LINE=$(date +'%Y-%m-%d')
-            fi
-            # Extract the title from the front matter (e.g., title: "Primer on LLM Inference")
-            TITLE_LINE=$(awk -F': ' '/^title:/ {print $2}' "$FILE" | head -n1)
-            TITLE_LINE=$(echo "$TITLE_LINE" | sed 's/^"//; s/"$//')
-            if [ -z "$TITLE_LINE" ]; then
-              TITLE_LINE=$(basename "$FILE" .md)
-            fi
-            # Create a slug from the title: lowercase, replace non-alphanumerics with hyphens
-            SLUG=$(echo "$TITLE_LINE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g')
-            SLUG=$(echo "$SLUG" | sed 's/-$//; s/^-//')
-            # Build the new filename
-            NEWNAME="${DATE_LINE}-${SLUG}.md"
-            DIRNAME=$(dirname "$FILE")
-            NEWPATH="$DIRNAME/$NEWNAME"
-            # Rename only if the filename is different
-            if [ "$FILE" != "$NEWPATH" ]; then
-              echo "Renaming $FILE -> $NEWPATH"
-              mv "$FILE" "$NEWPATH"
+          find _posts/Chapters -type f -name "*.md" | while read FILE; do
+            # Skip if already tracked
+            if ! git ls-files --error-unmatch "$FILE" > /dev/null 2>&1; then
+              # Extract YYYY-MM-DD from front matter (handles optional quotes)
+              DATE_LINE=$(grep '^date:' "$FILE" | sed -E 's/^date:\s*"?([0-9]{4}-[0-9]{2}-[0-9]{2}).*/\1/')
+              if [ -z "$DATE_LINE" ]; then
+                DATE_LINE=$(date +'%Y-%m-%d')
+              fi
+
+              # Extract title from front matter (handles optional quotes)
+              TITLE_LINE=$(grep '^title:' "$FILE" | sed -E 's/^title:\s*"?(.*)"?/\1/')
+              if [ -z "$TITLE_LINE" ]; then
+                TITLE_LINE=$(basename "$FILE" .md)
+              fi
+
+              # Create a slug: lowercase, replace non-alphanumerics with '-'
+              SLUG=$(echo "$TITLE_LINE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g')
+              SLUG=$(echo "$SLUG" | sed 's/^-//; s/-$//')
+
+              NEWNAME="${DATE_LINE}-${SLUG}.md"
+              DIRNAME=$(dirname "$FILE")
+              NEWPATH="$DIRNAME/$NEWNAME"
+
+              if [ "$FILE" != "$NEWPATH" ]; then
+                echo "Renaming new file $FILE -> $NEWPATH"
+                mv "$FILE" "$NEWPATH"
+              fi
             fi
           done
 
-      # 7. Commit and push changes to the blog repository
+      # 7. Debug step to see what Git sees after all changes
+      - name: Debug Git status
+        working-directory: blog
+        run: |
+          echo "=== GIT STATUS ==="
+          git status
+          echo "=== UNTRACKED FILES ==="
+          git ls-files --others --exclude-standard
+          echo "=== GIT DIFF (stat) ==="
+          git diff --stat
+
+      # 8. Commit and push changes to the blog repository
       - name: Commit and Push
         working-directory: blog
         run: |
           git add .
+          # If there are no changes, commit will fail, so handle gracefully
           git diff --quiet && echo "No changes to commit" || git commit -m "Auto-update blog from PMPP_Notes on $(date +'%Y-%m-%d %H:%M:%S')"
           git push
           echo "Blog updated!"
