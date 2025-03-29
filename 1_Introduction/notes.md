@@ -23,7 +23,9 @@
 ### Speedup from Parallelism
 
 - The speedup achieved from parallelism depends on the portion of application that can be parallelized. *Amadahl's Law* gives a theoretical limit on the speedup that can be achieved from parallelism. It is given by the formula:
+
 $$ S = \frac{1}{(1-P) + \frac{P}{N}} $$
+
 where:
 - $S$ is the speedup
 - $P$ is the portion of the application that can be parallelized
