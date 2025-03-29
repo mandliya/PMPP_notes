@@ -1,0 +1,121 @@
+name: Update Blog from PMPP_Notes
+
+on:
+  push:
+    branches: [ "main" ]  # Adjust if needed
+
+jobs:
+  update-blog:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the PMPP_Notes repository (this repo)
+      - name: Check out PMPP_Notes
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # 2. Configure Git identity for commits
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      # 3. Check out your blog repository into a subfolder called "blog"
+      - name: Check out Blog Repo
+        uses: actions/checkout@v3
+        with:
+          repository: mandliya/mandliya.github.io
+          path: blog
+          token: ${{ secrets.BLOG_TOKEN }}
+          # If your blog uses a branch like gh-pages, uncomment the following line:
+          # ref: gh-pages
+
+      # 4. Sync PMPP_Notes content into blog/_posts/Chapters/ (preserving folder structure)
+      - name: Sync PMPP_Notes to _posts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+          mkdir -p blog/_posts/Chapters
+          rsync -av --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.vscode' \
+            --exclude '.gitignore' \
+            --exclude 'update_blog.yml' \
+            ./ blog/_posts/Chapters/
+
+      # 5. Inject default front matter only into new (untracked) files
+      - name: Ensure front matter on new files only
+        run: |
+          # Change directory to blog so that git ls-files works as expected.
+          cd blog
+          find _posts -type f -name "*.md" | while read FILE; do
+            # Only process files that are not yet tracked (i.e. newly added)
+            if ! git ls-files --error-unmatch "$FILE" > /dev/null 2>&1; then
+              if ! head -n 1 "$FILE" | grep -q '^---'; then
+                echo "Injecting default front matter into new file: $FILE"
+                TEMP_FILE="$(mktemp)"
+                cat <<EOF > "$TEMP_FILE"
+---
+title: "$(basename "$FILE" .md)"
+date: "$(date +'%Y-%m-%d %H:%M:%S %z')"
+categories: [PMPP_Notes]
+tags: [CUDA, HPC]
+description: "Auto-generated front matter for $(basename "$FILE")"
+math: true
+mermaid: true
+pin: false
+---
+EOF
+                cat "$FILE" >> "$TEMP_FILE"
+                mv "$TEMP_FILE" "$FILE"
+              fi
+            else
+              echo "Skipping file $FILE as it is already tracked"
+            fi
+          done
+
+      # 6. Rename files to match the required Jekyll naming structure: YYYY-MM-DD-some_slug.md
+      - name: Rename files to match Jekyll pattern
+        run: |
+          cd blog
+          find _posts -type f -name "*.md" | while read FILE; do
+            # Extract the date from the front matter (e.g., date: 2024-10-31 13:43:48 -0700)
+            DATE_LINE="$(awk '/^date:/ {print $2}' "$FILE" | head -n1)"
+            if [ -z "$DATE_LINE" ]; then
+              DATE_LINE="$(date +'%Y-%m-%d')"
+            fi
+
+            # Extract the title from the front matter (e.g., title: "Primer on LLM Inference")
+            TITLE_LINE="$(awk -F': ' '/^title:/ {print $2}' "$FILE" | head -n1)"
+            TITLE_LINE="$(echo "$TITLE_LINE" | sed 's/^"//; s/"$//')"
+            if [ -z "$TITLE_LINE" ]; then
+              TITLE_LINE="$(basename "$FILE" .md)"
+            fi
+
+            # Create a slug from the title: lowercase, replace non-alphanumerics with hyphens
+            SLUG="$(echo "$TITLE_LINE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g')"
+            SLUG="$(echo "$SLUG" | sed 's/-$//; s/^-//')"
+
+            # Build the new filename
+            NEWNAME="${DATE_LINE}-${SLUG}.md"
+            DIRNAME="$(dirname "$FILE")"
+            NEWPATH="$DIRNAME/$NEWNAME"
+
+            # Rename only if the filename is different
+            if [ "$FILE" != "$NEWPATH" ]; then
+              echo "Renaming $FILE -> $NEWPATH"
+              mv "$FILE" "$NEWPATH"
+            fi
+          done
+
+      # 7. Commit and push changes to the blog repository
+      - name: Commit and Push
+        working-directory: blog
+        run: |
+          git add .
+          # If there are no changes, commit will be skipped gracefully
+          git diff --quiet && echo "No changes to commit" || git commit -m "Auto-update blog from PMPP_Notes on $(date +'%Y-%m-%d %H:%M:%S')"
+          git push
+          echo "Blog updated!"
