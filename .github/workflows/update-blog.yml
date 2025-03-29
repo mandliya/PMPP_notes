@@ -54,20 +54,17 @@ jobs:
             if ! git ls-files --error-unmatch "$FILE" > /dev/null 2>&1; then
               if ! head -n 1 "$FILE" | grep -q '^---'; then
                 echo "Injecting default front matter into new file: $FILE"
-                TEMP_FILE="$(mktemp)"
-                # Use <<-EOF with tab-indented content (make sure to use literal tab characters)
-                cat <<-EOF > "$TEMP_FILE"
-		---
-		title: "$(basename "$FILE" .md)"
-		date: "$(date +'%Y-%m-%d %H:%M:%S %z')"
-		categories: [PMPP_Notes]
-		tags: [CUDA, HPC]
-		description: "Auto-generated front matter for $(basename "$FILE")"
-		math: true
-		mermaid: true
-		pin: false
-		---
-EOF
+                TEMP_FILE=$(mktemp)
+                echo '---' > "$TEMP_FILE"
+                echo "title: \"$(basename "$FILE" .md)\"" >> "$TEMP_FILE"
+                echo "date: \"$(date +'%Y-%m-%d %H:%M:%S %z')\"" >> "$TEMP_FILE"
+                echo "categories: [PMPP_Notes]" >> "$TEMP_FILE"
+                echo "tags: [CUDA, HPC]" >> "$TEMP_FILE"
+                echo "description: \"Auto-generated front matter for $(basename "$FILE")\"" >> "$TEMP_FILE"
+                echo "math: true" >> "$TEMP_FILE"
+                echo "mermaid: true" >> "$TEMP_FILE"
+                echo "pin: false" >> "$TEMP_FILE"
+                echo '---' >> "$TEMP_FILE"
                 cat "$FILE" >> "$TEMP_FILE"
                 mv "$TEMP_FILE" "$FILE"
               fi
@@ -82,22 +79,22 @@ EOF
           cd blog
           find _posts -type f -name "*.md" | while read FILE; do
             # Extract the date from the front matter (e.g., date: 2024-10-31 13:43:48 -0700)
-            DATE_LINE="$(awk '/^date:/ {print $2}' "$FILE" | head -n1)"
+            DATE_LINE=$(awk '/^date:/ {print $2}' "$FILE" | head -n1)
             if [ -z "$DATE_LINE" ]; then
-              DATE_LINE="$(date +'%Y-%m-%d')"
+              DATE_LINE=$(date +'%Y-%m-%d')
             fi
             # Extract the title from the front matter (e.g., title: "Primer on LLM Inference")
-            TITLE_LINE="$(awk -F': ' '/^title:/ {print $2}' "$FILE" | head -n1)"
-            TITLE_LINE="$(echo "$TITLE_LINE" | sed 's/^"//; s/"$//')"
+            TITLE_LINE=$(awk -F': ' '/^title:/ {print $2}' "$FILE" | head -n1)
+            TITLE_LINE=$(echo "$TITLE_LINE" | sed 's/^"//; s/"$//')
             if [ -z "$TITLE_LINE" ]; then
-              TITLE_LINE="$(basename "$FILE" .md)"
+              TITLE_LINE=$(basename "$FILE" .md)
             fi
             # Create a slug from the title: lowercase, replace non-alphanumerics with hyphens
-            SLUG="$(echo "$TITLE_LINE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g')"
-            SLUG="$(echo "$SLUG" | sed 's/-$//; s/^-//')"
+            SLUG=$(echo "$TITLE_LINE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g')
+            SLUG=$(echo "$SLUG" | sed 's/-$//; s/^-//')
             # Build the new filename
             NEWNAME="${DATE_LINE}-${SLUG}.md"
-            DIRNAME="$(dirname "$FILE")"
+            DIRNAME=$(dirname "$FILE")
             NEWPATH="$DIRNAME/$NEWNAME"
             # Rename only if the filename is different
             if [ "$FILE" != "$NEWPATH" ]; then
